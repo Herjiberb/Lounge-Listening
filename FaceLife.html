@@ -186,18 +186,15 @@
     // State Variables
     let peer = null;
     let localStream = null;
-    let remoteCall = null;
-    let coordinatorConn = null; // Connection to/from the lounge coordinator
+    let currentCall = null;
+    let dataConn = null;
     
     // Tracks state
     let isVideoEnabled = true;
     let isAudioEnabled = true;
     let myNickname = "Buddy";
     let myLoungeId = "chipmunk-lounge";
-
-    // Track active pairings
-    let waitingPeers = []; // Used if we are the coordinator
-    let isCoordinator = false;
+    let myRole = "guest"; // 'host' or 'guest'
 
     // Elements
     const setupScreen = document.getElementById('setupScreen');
@@ -240,10 +237,20 @@
     }
     dialogBtnClose.addEventListener('click', () => dialogOverlay.classList.add('hidden'));
 
+    // Generate random string
+    function makeId(length) {
+      let result = '';
+      const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      for (let i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * characters.length));
+      }
+      return result;
+    }
+
     // Handle initial connect action
     btnConnect.addEventListener('click', async () => {
       myNickname = nicknameInput.value.trim() || "Buddy" + Math.floor(Math.random() * 900 + 100);
-      myLoungeId = loungeIdInput.value.trim().toLowerCase() || "chipmunk-lounge";
+      myLoungeId = loungeIdInput.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "") || "chipmunk-lounge";
 
       updateUIStatus('connecting', 'Acquiring Cam/Mic Access...');
 
@@ -268,8 +275,8 @@
         setupScreen.classList.add('hidden');
         callScreen.classList.remove('hidden');
 
-        // Initialize Peer JS Client
-        initPeerSystem();
+        // Initialize connection protocol
+        attemptPeerRegistration();
 
       } catch (err) {
         console.error("Camera access failed:", err);
@@ -281,173 +288,122 @@
       }
     });
 
-    // Setup P2P match routing
-    function initPeerSystem() {
-      // Create random ID for ourselves
-      const myUniqueId = `chipmunk-${myLoungeId}-${Math.floor(Math.random() * 89999 + 10000)}`;
-      
-      updateUIStatus('connecting', 'Linking Network...');
+    // Step 1: Attempt to register as the primary Host of this Lounge ID
+    function attemptPeerRegistration() {
+      const primaryHostId = `chipmunk-lounge-${myLoungeId}`;
+      updateUIStatus('connecting', 'Deploying Secure Line...');
 
-      peer = new Peer(myUniqueId, {
+      // Try taking the host ID
+      peer = new Peer(primaryHostId, {
         debug: 1
       });
 
       peer.on('open', (id) => {
-        updateUIStatus('connecting', 'Searching for Coordinator...');
-        attemptLobbyConnection();
-      });
-
-      // Handle direct FaceTime calls from friends
-      peer.on('call', (call) => {
-        remoteCall = call;
-        call.answer(localStream);
-        
-        call.on('stream', (remoteStream) => {
-          remoteVideo.srcObject = remoteStream;
-          remotePlaceholder.classList.add('hidden');
-          
-          // Get metadata if possible
-          remoteLabel.innerText = "Connected";
-        });
-
-        call.on('close', resetRemoteFaceTime);
+        // Successfully registered as primary Host!
+        myRole = "host";
+        updateUIStatus('online', 'Lounge Host Active');
+        setupHostListeners();
       });
 
       peer.on('error', (err) => {
-        console.error("Peer network error:", err);
-        if (err.type === 'network') {
-          showDialog("Network Disturbance", "FaceTime connection lost. Please check your internet connection.");
+        // If ID is already taken, someone else is hosting. Register as Supporting Host!
+        if (err.type === 'unavailable-id') {
+          peer.destroy();
+          registerAsSupportingHost();
+        } else {
+          console.error("PeerJS Error:", err);
+          updateUIStatus('offline', 'Network Error');
+          showDialog("Network Disturbance", "Setup failed. Please refresh and try again.");
         }
       });
     }
 
-    // Try finding the Lounge Coordinator node
-    function attemptLobbyConnection() {
-      const coordinatorId = `chipmunk-coord-${myLoungeId}`;
-      
-      // Attempt connection to deterministic coordinator ID
-      const conn = peer.connect(coordinatorId);
-      
-      let coordinatorResponsive = false;
-      const timeout = setTimeout(() => {
-        if (!coordinatorResponsive) {
-          conn.close();
-          // No active lobby coordinator. We assume the role!
-          assumeCoordinatorRole();
-        }
-      }, 2500);
+    // Step 2: Register as Guest / Supporting Host
+    function registerAsSupportingHost() {
+      const guestId = `chipmunk-lounge-${myLoungeId}-guest-${makeId(5)}`;
+      myRole = "guest";
+      updateUIStatus('connecting', 'Joining Friend\'s Room...');
 
-      conn.on('open', () => {
-        coordinatorResponsive = true;
-        clearTimeout(timeout);
-        coordinatorConn = conn;
-        
-        updateUIStatus('online', 'Lobby Connected');
-
-        // Request pairing from the coordinator
-        conn.send({
-          type: 'REQUEST_PAIR',
-          nickname: myNickname,
-          peerId: peer.id
-        });
-      });
-
-      conn.on('data', (data) => {
-        if (data.type === 'PAIR_WITH') {
-          initiateDirectFaceTime(data.targetId, data.targetName);
-        }
-      });
-
-      conn.on('close', () => {
-        if (!isCoordinator) {
-          updateUIStatus('connecting', 'Lobby Lost. Auto-healing...');
-          attemptLobbyConnection();
-        }
-      });
-    }
-
-    // Assume the coordinator role (so other friends can connect to us)
-    function assumeCoordinatorRole() {
-      isCoordinator = true;
-      waitingPeers = [];
-
-      // Recreate our Peer on the deterministic lobby coordinator address
-      if (peer) {
-        peer.destroy();
-      }
-
-      const coordinatorId = `chipmunk-coord-${myLoungeId}`;
-      peer = new Peer(coordinatorId, {
+      peer = new Peer(guestId, {
         debug: 1
       });
 
-      peer.on('open', (id) => {
-        updateUIStatus('online', 'Hosting Lobby Coordinator');
-        
-        // Since we are the coordinator, we can still call/be called by others!
-        // Coordinators can participate in calls if needed, but primarily manage matching.
+      peer.on('open', () => {
+        updateUIStatus('online', 'Supporting Host Active');
+        dialLoungeHost();
       });
 
+      peer.on('error', (err) => {
+        console.error("Guest Peer Error:", err);
+        updateUIStatus('offline', 'Connection Failed');
+      });
+    }
+
+    // Step 3 (Host Mode): Wait for Supporting Hosts to call us
+    function setupHostListeners() {
+      // Direct Data Connection
       peer.on('connection', (conn) => {
-        conn.on('data', (data) => {
-          if (data.type === 'REQUEST_PAIR') {
-            handlePairingRequest(conn, data.peerId, data.nickname);
+        dataConn = conn;
+        dataConn.on('open', () => {
+          // Send our nickname to the guest
+          dataConn.send({ type: 'NICKNAME', name: myNickname });
+        });
+        dataConn.on('data', (data) => {
+          if (data.type === 'NICKNAME') {
+            remoteLabel.innerText = data.name;
           }
         });
+        dataConn.on('close', resetRemoteFaceTime);
       });
 
+      // Video Call Connection
       peer.on('call', (call) => {
-        remoteCall = call;
+        currentCall = call;
         call.answer(localStream);
-        call.on('stream', (stream) => {
-          remoteVideo.srcObject = stream;
-          remotePlaceholder.classList.add('hidden');
-          remoteLabel.innerText = "Active Friend";
-        });
-        call.on('close', resetRemoteFaceTime);
+        setupStreamHandlers(call);
       });
     }
 
-    // Pair waiting friends sequentially
-    function handlePairingRequest(conn, peerId, name) {
-      if (waitingPeers.length > 0) {
-        // We have a waiting friend! Match them together.
-        const buddy = waitingPeers.shift();
+    // Step 3 (Guest Mode): Call the Lounge Host directly
+    function dialLoungeHost() {
+      const primaryHostId = `chipmunk-lounge-${myLoungeId}`;
 
-        // Instruct Buddy to initiate FaceTime with new user
-        buddy.connection.send({
-          type: 'PAIR_WITH',
-          targetId: peerId,
-          targetName: name
-        });
+      // Open Data Connection to exchange usernames
+      dataConn = peer.connect(primaryHostId);
+      dataConn.on('open', () => {
+        dataConn.send({ type: 'NICKNAME', name: myNickname });
+      });
+      dataConn.on('data', (data) => {
+        if (data.type === 'NICKNAME') {
+          remoteLabel.innerText = data.name;
+        }
+      });
+      dataConn.on('close', resetRemoteFaceTime);
 
-        // Instruct new user to connect with Buddy
-        conn.send({
-          type: 'PAIR_WITH',
-          targetId: buddy.peerId,
-          targetName: buddy.name
-        });
-
-      } else {
-        // Nobody waiting. Place this friend in queue.
-        waitingPeers.push({
-          peerId: peerId,
-          name: name,
-          connection: conn
-        });
-      }
+      // Open WebRTC Audio/Video call
+      const call = peer.call(primaryHostId, localStream);
+      currentCall = call;
+      setupStreamHandlers(call);
     }
 
-    // Initiate WebRTC Call to paired peer
-    function initiateDirectFaceTime(targetId, name) {
-      remoteLabel.innerText = name;
-      
-      const call = peer.call(targetId, localStream);
-      remoteCall = call;
-
+    // Step 4: Stream binding with Autoplay recovery
+    function setupStreamHandlers(call) {
       call.on('stream', (remoteStream) => {
         remoteVideo.srcObject = remoteStream;
         remotePlaceholder.classList.add('hidden');
+
+        // Force playback in case browser policy attempts to block audio/video autoplay
+        const playPromise = remoteVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log("Autoplay blocked. Tap anywhere to start video audio stream.");
+            const forcePlay = () => {
+              remoteVideo.play().catch(e => console.log(e));
+              document.removeEventListener('click', forcePlay);
+            };
+            document.addEventListener('click', forcePlay);
+          });
+        }
       });
 
       call.on('close', resetRemoteFaceTime);
@@ -459,7 +415,7 @@
       remoteLabel.innerText = "Connecting...";
     }
 
-    // Controls Logic
+    // Control switches
     btnToggleCam.addEventListener('click', () => {
       if (!localStream) return;
       isVideoEnabled = !isVideoEnabled;
@@ -505,13 +461,13 @@
     });
 
     function hangUpAndReturn() {
-      if (remoteCall) {
-        remoteCall.close();
-        remoteCall = null;
+      if (currentCall) {
+        currentCall.close();
+        currentCall = null;
       }
-      if (coordinatorConn) {
-        coordinatorConn.close();
-        coordinatorConn = null;
+      if (dataConn) {
+        dataConn.close();
+        dataConn = null;
       }
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
@@ -522,13 +478,11 @@
         peer = null;
       }
 
-      // Reset state
+      // Reset states
       isVideoEnabled = true;
       isAudioEnabled = true;
-      isCoordinator = false;
-      waitingPeers = [];
 
-      // Restore GUI elements
+      // Restore GUI
       localVideo.srcObject = null;
       remoteVideo.srcObject = null;
       localPlaceholder.classList.add('hidden');
