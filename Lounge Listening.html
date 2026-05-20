@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Homework Radio Station & Study Lounge</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS for seamless WebRTC P2P communication -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background: radial-gradient(circle at top right, #111827 0%, #030712 100%);
+    }
+    .lofi-glow {
+      box-shadow: 0 0 20px rgba(244, 63, 94, 0.15);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col justify-between font-sans selection:bg-rose-500/30 selection:text-rose-200">
+
+  <!-- Header Banner -->
+  <header class="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md sticky top-0 z-40 transition-all">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-rose-500 to-amber-500 flex items-center justify-center shadow-lg shadow-rose-500/20">
+          <svg class="w-6 h-6 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 0L21 8.25M19.5 6v12m-3-12v12M9 9h10.5M9 9V18c0 .828-.672 1.5-1.5 1.5s-1.5-.672-1.5-1.5 1.5-1.5 1.5-1.5H9m0-9L3 11.25M3 11.25L4.5 13.5M3 11.25V18c0 .828.672 1.5 1.5 1.5s1.5-.672 1.5-1.5S5.328 15 4.5 15H3" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold font-display tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-rose-200 via-amber-200 to-amber-100">Homework Radio</h1>
+          <p class="text-xs text-slate-400">P2P Study Room & Real-time Live Audio Streamer</p>
+        </div>
+      </div>
+
+      <!-- Quick Room Code / Connection Info -->
+      <div class="flex items-center gap-3">
+        <div id="connectionIndicator" class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800 text-xs">
+          <span class="w-2.5 h-2.5 rounded-full bg-slate-500" id="indicatorDot"></span>
+          <span id="indicatorText" class="text-slate-400">Offline</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspaces -->
+  <main class="max-w-6xl mx-auto px-4 py-6 flex-grow w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    
+    <!-- Left Hand Side: Controls, Host Setup, and Stream Stats (5 Cols) -->
+    <div class="lg:col-span-5 flex flex-col gap-6 w-full">
+      
+      <!-- Welcome Card -->
+      <div class="bg-gradient-to-br from-slate-900/90 to-slate-950/90 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full blur-3xl pointer-events-none"></div>
+        <h2 class="text-lg font-bold font-display text-rose-300 mb-2">Welcome to Study Lounge! ☕</h2>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Create your own broadcast channel to play study jams, lo-fi tracks, or host a focus session. Or, simply tune in to another room to chat with peers, choose a cool avatar color, and listen together!
+        </p>
+      </div>
+
+      <!-- Station Control Hub -->
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-md">
+        <h3 class="text-sm font-bold font-display uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span> Station Deck
+        </h3>
+
+        <!-- Initial Mode Selection Tabs -->
+        <div id="deckSelectionArea" class="space-y-4">
+          <div class="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800/80">
+            <button id="tabTuneIn" class="py-2.5 text-sm font-semibold rounded-lg transition-all text-rose-400 bg-slate-900 border border-slate-800">
+              🎵 Tune In
+            </button>
+            <button id="tabHost" class="py-2.5 text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200">
+              🎙️ Host Radio
+            </button>
+          </div>
+
+          <!-- Tune-In Form -->
+          <div id="tuneInForm" class="space-y-4 pt-2">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5">Your Nickname</label>
+              <input type="text" id="listenerName" placeholder="StudyBuddy" maxlength="15" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-500 transition-colors">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5">Avatar Base Color</label>
+              <div class="flex items-center gap-2.5">
+                <input type="color" id="avatarColor" value="#f43f5e" class="w-10 h-10 rounded-xl border-0 bg-transparent cursor-pointer">
+                <span class="text-xs text-slate-400">Click to pick your signature chat shade</span>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5">Station Room Code</label>
+              <input type="text" id="listenerRoom" value="study-lounge" placeholder="e.g. study-lounge" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-500 transition-colors font-mono">
+            </div>
+
+            <button id="btnStartListening" class="w-full py-3 bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-slate-950 font-bold rounded-xl transition-all shadow-md active:scale-98 flex items-center justify-center gap-2">
+              <svg class="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+              </svg>
+              Join Station
+            </button>
+          </div>
+
+          <!-- Host-Station Form -->
+          <div id="hostForm" class="space-y-4 pt-2 hidden">
+            <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-200 leading-relaxed mb-1">
+              <strong>🎙️ Broadcaster Notice:</strong> Streaming requires you to share a tab/window with audio enabled so PeerJS can loop your feed directly to students.
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5">Broadcaster Password</label>
+              <input type="password" id="hostPassword" placeholder="Enter Host Password" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-500 transition-colors">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5">Station Room Code</label>
+              <input type="text" id="hostRoom" value="study-lounge" placeholder="e.g. study-lounge" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-rose-500 transition-colors font-mono">
+            </div>
+
+            <button id="btnStartHosting" class="w-full py-3 bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-bold rounded-xl transition-all shadow-md active:scale-98 flex items-center justify-center gap-2">
+              <svg class="w-4 h-4 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+              </svg>
+              Go Live & Share Sound
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Mode Dashboard UI (Hidden until linked) -->
+        <div id="activeDashboard" class="hidden space-y-4">
+          <!-- Active Status Badge -->
+          <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] font-bold text-rose-400 uppercase tracking-wider" id="activeLabel">Broadcasting</span>
+              <h4 class="font-display font-semibold text-sm" id="activeRoomName">study-lounge</h4>
+            </div>
+            <button id="btnLeaveSession" class="text-xs px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 font-semibold hover:bg-rose-500/20 rounded-lg transition-all">
+              Disconnect
+            </button>
+          </div>
+
+          <!-- Audio Stream Output Control / Visualizer -->
+          <div id="receiverPlayerBlock" class="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl hidden">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-[10px] font-mono text-slate-400">Stream Playback</span>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                <span class="text-[10px] text-rose-400 uppercase font-semibold">Tuned In</span>
+              </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                <svg class="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                </svg>
+              </div>
+              <div class="flex-grow">
+                <!-- Volume Control -->
+                <input type="range" id="listenerVolume" min="0" max="1" step="0.05" value="0.8" class="w-full accent-rose-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+              </div>
+              <span class="text-xs font-mono text-slate-400" id="volumePercentage">80%</span>
+            </div>
+          </div>
+
+          <!-- Live Frequency Spectrogram Area -->
+          <div class="relative bg-slate-950 border border-slate-800 rounded-2xl h-32 overflow-hidden">
+            <canvas id="liveVizCanvas" class="w-full h-full absolute inset-0 opacity-85"></canvas>
+            <div class="absolute bottom-2.5 left-3 text-[10px] font-mono text-slate-500 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800/60">
+              Live Spectrum Wave
+            </div>
+          </div>
+
+          <!-- Peer List & Quick Room stats -->
+          <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-3.5 space-y-2">
+            <div class="flex items-center justify-between text-xs text-slate-400">
+              <span>Listeners Connected</span>
+              <span id="txtPeerCount" class="font-bold text-rose-400">0</span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-slate-400">
+              <span>Radio Status</span>
+              <span id="txtStatusLabel" class="font-bold text-amber-400">Ready</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Right Hand Side: Interactive Chat & Custom Lounge (7 Cols) -->
+    <div class="lg:col-span-7 flex flex-col gap-6 w-full">
+      
+      <!-- Chat Area Box -->
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-5 backdrop-blur-md flex flex-col h-[520px] shadow-xl relative overflow-hidden">
+        
+        <!-- Chat Header -->
+        <div class="flex items-center justify-between pb-3.5 border-b border-slate-800/80 mb-4">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2.5 h-2.5 rounded-full bg-emerald-500" id="chatHeaderPulse"></div>
+            <div>
+              <h3 class="font-bold font-display text-sm text-slate-200" id="chatRoomHeader">Lounge Chatroom</h3>
+              <p class="text-[10px] text-slate-400" id="chatRoomSubtitle">Broadcast offline. Hangout mode active.</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-full border border-slate-800/80" id="lobbyStatusBadge">Lounge Mode</span>
+        </div>
+
+        <!-- Scrollable Messages list -->
+        <div id="chatMessages" class="flex-grow overflow-y-auto custom-scrollbar space-y-3.5 pr-2">
+          <!-- Welcome message -->
+          <div class="flex items-start gap-3 bg-slate-950/30 p-3 rounded-2xl border border-slate-800/30">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-xs font-bold text-slate-950">📻</div>
+            <div class="flex-grow">
+              <div class="flex items-baseline gap-2">
+                <span class="text-xs font-bold text-rose-300">Homework Radio Desk</span>
+                <span class="text-[9px] text-slate-500">System</span>
+              </div>
+              <p class="text-xs text-slate-300 leading-relaxed mt-0.5">
+                Hey study club! This room is your digital desk. Enter a room name to join other students, select a custom chat color, and chat live while playing background audio! Keep focused and have fun! 📚
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat input dock -->
+        <form id="chatForm" class="mt-4 flex gap-2.5 items-center">
+          <input type="text" id="chatInput" disabled placeholder="Join a room to send messages..." class="flex-grow bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-rose-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          <button type="submit" id="btnSendChat" disabled class="px-5 py-3 bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-sm rounded-xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+            Send
+          </button>
+        </form>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Global Custom Warning Modal -->
+  <div id="modalOverlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 max-w-md w-full rounded-3xl p-6 shadow-2xl relative">
+      <div id="modalIconContainer" class="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center justify-center text-rose-400 mb-4">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+        </svg>
+      </div>
+
+      <h3 id="modalTitle" class="text-lg font-bold font-display text-slate-100 mb-2">Error Alert</h3>
+      <p id="modalDescription" class="text-sm text-slate-400 leading-relaxed mb-6"></p>
+
+      <div class="flex items-center gap-3">
+        <button id="modalBtnClose" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl transition-colors text-sm">
+          Acknowledge
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer block -->
+  <footer class="border-t border-slate-900/80 bg-slate-950/60 py-5 text-center text-xs text-slate-500">
+    <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <p>&copy; 2026 Homework Radio Station. Decentralized Study Hub.</p>
+      <div class="flex items-center gap-4 text-[11px] text-slate-400">
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Fully Encrypted</span>
+        <span>Made for productive students worldwide</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Application Logic -->
+  <script>
+    // Configuration
+    const HOST_PASSWORD = "Bryant Reitzel";
+
+    // Application State Variables
+    let peer = null;
+    let localStream = null;
+    let remoteStream = null;
+    let activeConnections = []; // Data connections (chat + peer lists)
+    let activeCalls = []; // Outgoing calls to listeners
+    let incomingCall = null;
+    
+    // Web Audio State
+    let audioCtx = null;
+    let analyzer = null;
+    let dataArray = null;
+    let visualizerAnimId = null;
+
+    // User metadata
+    let currentUserRole = null; // 'host' or 'listener'
+    let currentRoomId = "study-lounge";
+    let myNickname = "Anonymous";
+    let myColor = "#f43f5e";
+
+    // Sub-lobbies (when host is offline, listeners coordinate amongst themselves)
+    let isLobbyCoordinator = false;
+
+    // Grab elements
+    const tabTuneIn = document.getElementById('tabTuneIn');
+    const tabHost = document.getElementById('tabHost');
+    const tuneInForm = document.getElementById('tuneInForm');
+    const hostForm = document.getElementById('hostForm');
+    
+    const listenerName = document.getElementById('listenerName');
+    const avatarColor = document.getElementById('avatarColor');
+    const listenerRoom = document.getElementById('listenerRoom');
+    const btnStartListening = document.getElementById('btnStartListening');
+    
+    const hostPassword = document.getElementById('hostPassword');
+    const hostRoom = document.getElementById('hostRoom');
+    const btnStartHosting = document.getElementById('btnStartHosting');
+
+    const deckSelectionArea = document.getElementById('deckSelectionArea');
+    const activeDashboard = document.getElementById('activeDashboard');
+    const activeLabel = document.getElementById('activeLabel');
+    const activeRoomName = document.getElementById('activeRoomName');
+    const btnLeaveSession = document.getElementById('btnLeaveSession');
+    const txtPeerCount = document.getElementById('txtPeerCount');
+    const txtStatusLabel = document.getElementById('txtStatusLabel');
+    
+    const receiverPlayerBlock = document.getElementById('receiverPlayerBlock');
+    const listenerVolume = document.getElementById('listenerVolume');
+    const volumePercentage = document.getElementById('volumePercentage');
+    
+    const liveVizCanvas = document.getElementById('liveVizCanvas');
+    const vizCtx = liveVizCanvas.getContext('2d');
+
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const btnSendChat = document.getElementById('btnSendChat');
+    const chatForm = document.getElementById('chatForm');
+    const chatRoomHeader = document.getElementById('chatRoomHeader');
+    const chatRoomSubtitle = document.getElementById('chatRoomSubtitle');
+    const lobbyStatusBadge = document.getElementById('lobbyStatusBadge');
+    const chatHeaderPulse = document.getElementById('chatHeaderPulse');
+
+    const indicatorDot = document.getElementById('indicatorDot');
+    const indicatorText = document.getElementById('indicatorText');
+
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalDescription = document.getElementById('modalDescription');
+    const modalBtnClose = document.getElementById('modalBtnClose');
+
+    // UI Tab toggle
+    tabTuneIn.addEventListener('click', () => {
+      tabTuneIn.className = "py-2.5 text-sm font-semibold rounded-lg transition-all text-rose-400 bg-slate-900 border border-slate-800";
+      tabHost.className = "py-2.5 text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200";
+      tuneInForm.classList.remove('hidden');
+      hostForm.classList.add('hidden');
+    });
+
+    tabHost.addEventListener('click', () => {
+      tabHost.className = "py-2.5 text-sm font-semibold rounded-lg transition-all text-rose-400 bg-slate-900 border border-slate-800";
+      tabTuneIn.className = "py-2.5 text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200";
+      hostForm.classList.remove('hidden');
+      tuneInForm.classList.add('hidden');
+    });
+
+    // Alert Utilities
+    function showModal(title, text) {
+      modalTitle.innerText = title;
+      modalDescription.innerHTML = text;
+      modalOverlay.classList.remove('hidden');
+    }
+    modalBtnClose.addEventListener('click', () => {
+      modalOverlay.classList.add('hidden');
+    });
+
+    // Generate unique random string for user peer IDs
+    function makeId(length) {
+      let result = '';
+      const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      for (let i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * characters.length));
+      }
+      return result;
+    }
+
+    // Connect display spectrum
+    function initVisualizer(stream) {
+      // Disconnect old animation
+      if (visualizerAnimId) {
+        cancelAnimationFrame(visualizerAnimId);
+      }
+
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const source = audioCtx.createMediaStreamSource(stream);
+        analyzer = audioCtx.createAnalyser();
+        analyzer.fftSize = 64; // Small and clean lofi bars
+        const bufferLength = analyzer.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+        
+        source.connect(analyzer);
+        renderVisualizer();
+      } catch (e) {
+        console.error("Audio Context Init error: ", e);
+      }
+    }
+
+    function renderVisualizer() {
+      const width = liveVizCanvas.width = liveVizCanvas.parentElement.clientWidth;
+      const height = liveVizCanvas.height = liveVizCanvas.parentElement.clientHeight;
+
+      const draw = () => {
+        if (!analyzer) return;
+        visualizerAnimId = requestAnimationFrame(draw);
+        
+        analyzer.getByteFrequencyData(dataArray);
+        vizCtx.clearRect(0, 0, width, height);
+
+        const barWidth = (width / dataArray.length) * 1.5;
+        let barHeight;
+        let x = 0;
+
+        for (let i = 0; i < dataArray.length; i++) {
+          barHeight = (dataArray[i] / 255) * height * 0.9;
+
+          const gradient = vizCtx.createLinearGradient(0, height, 0, height - barHeight);
+          gradient.addColorStop(0, '#f43f5e'); // Rose
+          gradient.addColorStop(0.5, '#f59e0b'); // Amber
+          gradient.addColorStop(1, '#ec4899'); // Pink
+
+          vizCtx.fillStyle = gradient;
+          vizCtx.fillRect(x, height - barHeight, barWidth - 3, barHeight);
+          x += barWidth;
+        }
+      };
+      draw();
+    }
+
+    // Dynamic Volume setting for Tuned-in audio element
+    let globalAudioNodeElement = null;
+    listenerVolume.addEventListener('input', (e) => {
+      const vol = parseFloat(e.target.value);
+      volumePercentage.innerText = Math.round(vol * 100) + "%";
+      if (globalAudioNodeElement) {
+        globalAudioNodeElement.volume = vol;
+      }
+    });
+
+    // Append beautiful messages to chatbox
+    function appendChatMessage(sender, message, color, isSystem = false) {
+      const msgBlock = document.createElement('div');
+      msgBlock.className = `flex items-start gap-3 p-2.5 rounded-xl transition-all ${isSystem ? 'bg-slate-950/40 border border-slate-800/30' : 'hover:bg-slate-950/20'}`;
+      
+      const cleanSender = sender.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const cleanMessage = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      const iconLetter = cleanSender.charAt(0).toUpperCase();
+
+      msgBlock.innerHTML = `
+        <div class="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-slate-950 flex-shrink-0" style="background-color: ${color}">
+          ${isSystem ? '📢' : iconLetter}
+        </div>
+        <div class="flex-grow">
+          <div class="flex items-baseline gap-2">
+            <span class="text-xs font-bold" style="color: ${isSystem ? '#fda4af' : color}">${cleanSender}</span>
+            <span class="text-[9px] text-slate-500">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed mt-0.5">${cleanMessage}</p>
+        </div>
+      `;
+      
+      chatMessages.appendChild(msgBlock);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Trigger local chat send
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      const messageObj = {
+        type: 'CHAT',
+        sender: myNickname,
+        text: text,
+        color: myColor
+      };
+
+      // Handle message based on role
+      if (currentUserRole === 'host') {
+        // Broadcast to everyone connected
+        broadcastToPeers(messageObj);
+        appendChatMessage(myNickname, text, myColor);
+      } else {
+        // Send directly to the peer coordinator / host we are connected to
+        activeConnections.forEach(conn => {
+          if (conn.open) {
+            conn.send(messageObj);
+          }
+        });
+        // Append locally immediately
+        appendChatMessage(myNickname, text, myColor);
+      }
+
+      chatInput.value = '';
+    });
+
+    // Helper: Broadcast data payload to all connected peers (Host or Lobby Coordinator)
+    function broadcastToPeers(payload) {
+      activeConnections.forEach(conn => {
+        if (conn.open) {
+          conn.send(payload);
+        }
+      });
+    }
+
+    // Update connection indicator at top
+    function updateConnectionState(state, customLabel = "") {
+      indicatorDot.className = "w-2.5 h-2.5 rounded-full " + 
+        (state === 'online' ? 'bg-emerald-500 animate-pulse' : 
+         state === 'connecting' ? 'bg-amber-500 animate-pulse' : 'bg-slate-500');
+      indicatorText.innerText = customLabel || (state === 'online' ? 'Live connected' : 'Offline');
+    }
+
+    // Cleanup & Disconnect system fully
+    function leaveRadioSession() {
+      // Send departure message to active connections
+      if (currentUserRole === 'listener' || isLobbyCoordinator) {
+        broadcastToPeers({
+          type: 'CHAT',
+          sender: 'System',
+          text: `👋 ${myNickname} has left the desk.`,
+          color: '#ef4444'
+        });
+      }
+
+      // Stop stream tracks
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+      
+      if (remoteStream) {
+        remoteStream.getTracks().forEach(track => track.stop());
+        remoteStream = null;
+      }
+
+      // Disconnect connections
+      activeConnections.forEach(conn => conn.close());
+      activeConnections = [];
+
+      activeCalls.forEach(call => call.close());
+      activeCalls = [];
+
+      if (peer) {
+        peer.destroy();
+        peer = null;
+      }
+
+      // Destroy HTML Audio Player node
+      if (globalAudioNodeElement) {
+        globalAudioNodeElement.pause();
+        globalAudioNodeElement.remove();
+        globalAudioNodeElement = null;
+      }
+
+      // Reset Context Visualizers
+      if (visualizerAnimId) {
+        cancelAnimationFrame(visualizerAnimId);
+      }
+      vizCtx.clearRect(0, 0, liveVizCanvas.width, liveVizCanvas.height);
+
+      // Re-enable Tab configuration
+      deckSelectionArea.classList.remove('hidden');
+      activeDashboard.classList.add('hidden');
+      receiverPlayerBlock.classList.add('hidden');
+      chatInput.disabled = true;
+      btnSendChat.disabled = true;
+      chatInput.placeholder = "Join a room to send messages...";
+
+      chatRoomHeader.innerText = "Lounge Chatroom";
+      chatRoomSubtitle.innerText = "Broadcast offline. Hangout mode active.";
+      lobbyStatusBadge.innerText = "Lounge Mode";
+      lobbyStatusBadge.className = "text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-full border border-slate-800/80";
+      chatHeaderPulse.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
+
+      updateConnectionState('offline');
+      currentUserRole = null;
+      isLobbyCoordinator = false;
+
+      appendChatMessage("System", "Disconnected from room lounge.", "#94a3b8", true);
+    }
+
+    btnLeaveSession.addEventListener('click', leaveRadioSession);
+
+
+    // ==========================================
+    // HOST OPERATION CODE
+    // ==========================================
+    btnStartHosting.addEventListener('click', async () => {
+      const password = hostPassword.value.trim();
+      currentRoomId = hostRoom.value.trim().toLowerCase() || "study-lounge";
+
+      // Enforce the Bryant Reitzel rule
+      if (password !== HOST_PASSWORD) {
+        showModal(
+          "Access Denied", 
+          "Incorrect Broadcaster Password! Please try again. (Hint: The password is your requested designer's name)."
+        );
+        return;
+      }
+
+      currentUserRole = 'host';
+      myNickname = "DJ Studio Host";
+      myColor = "#fb7185"; // Premium rose host brand
+
+      updateConnectionState('connecting', 'Deploying Broadcast Node...');
+
+      try {
+        // Trigger screen/tab media capture for Loopback system audio
+        localStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: "browser", 
+          },
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          },
+          systemAudio: "include"
+        });
+
+        // Ensure audio was toggled correctly
+        if (localStream.getAudioTracks().length === 0) {
+          localStream.getTracks().forEach(track => track.stop());
+          localStream = null;
+          updateConnectionState('offline');
+          showModal(
+            "Loopback Audio Missing",
+            "Please make sure you checked the <strong>'Share audio'</strong> checkbox in the Chrome/browser window selection popup!"
+          );
+          return;
+        }
+
+        // Initialize PeerJS host peer with standard reliable parameters
+        // ID pattern guarantees listeners know where to seek: hw-radio-{room_id}-host
+        const hostPeerId = `hw-radio-${currentRoomId}-host`;
+        peer = new Peer(hostPeerId, {
+          debug: 1
+        });
+
+        peer.on('open', (id) => {
+          updateConnectionState('online', 'Broadcasting Live');
+          
+          // Switch GUI components
+          deckSelectionArea.classList.add('hidden');
+          activeDashboard.classList.remove('hidden');
+          receiverPlayerBlock.classList.add('hidden'); // Host doesn't play back their own stream
+          
+          activeLabel.innerText = "Station Host Active";
+          activeLabel.className = "text-[10px] font-bold text-amber-400 uppercase tracking-wider";
+          activeRoomName.innerText = `Room: ${currentRoomId}`;
+          txtStatusLabel.innerText = "Streaming live";
+          txtStatusLabel.className = "font-bold text-emerald-400";
+          txtPeerCount.innerText = "0";
+
+          // Chat adjustments
+          chatRoomHeader.innerText = `${currentRoomId} - Host Booth`;
+          chatRoomSubtitle.innerText = "Real-time sound streaming is operational!";
+          lobbyStatusBadge.innerText = "Broadcasting Hub";
+          lobbyStatusBadge.className = "text-[10px] font-mono text-amber-400 bg-amber-950/20 px-2.5 py-1 rounded-full border border-amber-500/25";
+          chatHeaderPulse.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse";
+          
+          chatInput.disabled = false;
+          btnSendChat.disabled = false;
+          chatInput.placeholder = "Type to communicate with tuned-in listeners...";
+
+          // Start Spectrogram visualizer locally on host loopback stream
+          initVisualizer(localStream);
+          appendChatMessage("System", `Successfully started Broadcast room '${currentRoomId}'!`, "#10b981", true);
+        });
+
+        // If the station ID is already taken, someone else is hosting this room
+        peer.on('error', (err) => {
+          console.error("Host Peer Error: ", err);
+          updateConnectionState('offline');
+          if (err.type === 'unavailable-id') {
+            showModal(
+              "Station Already Online",
+              `The room code '<strong>${currentRoomId}</strong>' currently has an active broadcast host. Please join as a listener or choose a different room name!`
+            );
+          } else {
+            showModal("Signaling Failed", "P2P Setup failed: " + err.message);
+          }
+          leaveRadioSession();
+        });
+
+        // Listen for incoming PeerJS Data Connections (Chat & Syncing)
+        peer.on('connection', (conn) => {
+          // Initialize listening sequence on this data link
+          setupHostDataLink(conn);
+        });
+
+        // Fallback for direct incoming calls
+        peer.on('call', (call) => {
+          call.answer(localStream);
+          activeCalls.push(call);
+        });
+
+      } catch (err) {
+        console.error("Display share failure: ", err);
+        updateConnectionState('offline');
+        showModal("Display Access Denied", "Broadcasting aborted. System audio loopback permissions are required.");
+      }
+    });
+
+    // Host Data Channel routing
+    function setupHostDataLink(conn) {
+      conn.on('open', () => {
+        activeConnections.push(conn);
+        txtPeerCount.innerText = activeConnections.length;
+
+        // Welcome player with system message
+        const welcomeText = `💡 Peer '${conn.metadata.nickname || 'Unknown'}' tuned into station!`;
+        appendChatMessage("System", welcomeText, "#fbbf24", true);
+
+        // Tell existing listeners someone else arrived
+        broadcastToPeers({
+          type: 'CHAT',
+          sender: 'System',
+          text: welcomeText,
+          color: '#fbbf24'
+        });
+
+        // CRITICAL UPDATE: The Host proactively CALLS the listener with the loopback stream
+        // This ensures WebRTC is initiated with tracks on the host side, bypasses browser caller blocks
+        if (localStream) {
+          const call = peer.call(conn.peer, localStream);
+          activeCalls.push(call);
+        }
+      });
+
+      conn.on('data', (data) => {
+        // Router for messaging payloads
+        if (data && data.type === 'CHAT') {
+          // Relay peer message to everyone else (including ourselves)
+          appendChatMessage(data.sender, data.text, data.color);
+          
+          // Relay message outward to other tuned-in listeners
+          broadcastToPeers({
+            type: 'CHAT',
+            sender: data.sender,
+            text: data.text,
+            color: data.color
+          });
+        }
+      });
+
+      conn.on('close', () => {
+        // Filter out closed data connection
+        activeConnections = activeConnections.filter(c => c.peer !== conn.peer);
+        txtPeerCount.innerText = activeConnections.length;
+        appendChatMessage("System", `A listener disconnected from the lounge.`, "#ef4444", true);
+      });
+    }
+
+
+    // ==========================================
+    // LISTENER / TUNE-IN OPERATION CODE
+    // ==========================================
+    btnStartListening.addEventListener('click', () => {
+      myNickname = listenerName.value.trim() || "Buddy" + Math.floor(Math.random() * 900 + 100);
+      myColor = avatarColor.value;
+      currentRoomId = listenerRoom.value.trim().toLowerCase() || "study-lounge";
+
+      currentUserRole = 'listener';
+      updateConnectionState('connecting', 'Tuning Radio Signal...');
+
+      // Build random listener Peer ID to avoid colliding
+      const listenerPeerId = `hw-radio-${currentRoomId}-listener-${makeId(6)}`;
+      
+      peer = new Peer(listenerPeerId, {
+        debug: 1
+      });
+
+      peer.on('open', (id) => {
+        // Now try connecting to the host
+        attemptToTuneIn();
+      });
+
+      // Listen for the incoming broadcast call from the Host
+      peer.on('call', (call) => {
+        call.answer(); // Answer empty (listener doesn't send audio back)
+        setupIncomingMedia(call);
+      });
+
+      peer.on('error', (err) => {
+        console.error("Listener Peer error: ", err);
+        updateConnectionState('offline');
+        showModal("P2P Error", "Could not establish listener network. Please refresh: " + err.message);
+      });
+    });
+
+    function attemptToTuneIn() {
+      const targetHostId = `hw-radio-${currentRoomId}-host`;
+      
+      // Try linking data connection to the host
+      const hostConn = peer.connect(targetHostId, {
+        metadata: { nickname: myNickname, color: myColor }
+      });
+
+      // Timeout safety check if host is offline
+      let hostResponsive = false;
+      const hostCheckTimer = setTimeout(() => {
+        if (!hostResponsive) {
+          console.warn("Host did not respond. Transitioning to lounge hangout chat-only mode.");
+          hostConn.close();
+          enterLobbyOnlyMode();
+        }
+      }, 3500);
+
+      hostConn.on('open', () => {
+        hostResponsive = true;
+        clearTimeout(hostCheckTimer);
+
+        activeConnections.push(hostConn);
+
+        // Success - connected to actual live stream!
+        updateConnectionState('online', 'Tuned In');
+        
+        deckSelectionArea.classList.add('hidden');
+        activeDashboard.classList.remove('hidden');
+        receiverPlayerBlock.classList.remove('hidden');
+
+        activeLabel.innerText = "Tuned In Live";
+        activeLabel.className = "text-[10px] font-bold text-emerald-400 uppercase tracking-wider";
+        activeRoomName.innerText = `Room: ${currentRoomId}`;
+        txtStatusLabel.innerText = "Live Audio Streaming";
+        txtStatusLabel.className = "font-bold text-emerald-400";
+        txtPeerCount.innerText = "Active Feed";
+
+        chatRoomHeader.innerText = `${currentRoomId} Lounge`;
+        chatRoomSubtitle.innerText = "Tuned in live with custom audio streaming.";
+        lobbyStatusBadge.innerText = "Live Station";
+        lobbyStatusBadge.className = "text-[10px] font-mono text-emerald-400 bg-emerald-950/20 px-2.5 py-1 rounded-full border border-emerald-500/25";
+        chatHeaderPulse.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+
+        chatInput.disabled = false;
+        btnSendChat.disabled = false;
+        chatInput.placeholder = "Say hi to the stream room...";
+
+        appendChatMessage("System", `Tuned into live host '${currentRoomId}'! Waiting for host to stream audio feed...`, "#10b981", true);
+      });
+
+      hostConn.on('data', (data) => {
+        if (data && data.type === 'CHAT') {
+          appendChatMessage(data.sender, data.text, data.color, data.sender === 'System');
+        }
+      });
+
+      hostConn.on('close', () => {
+        appendChatMessage("System", "Host broadcast connection closed.", "#f43f5e", true);
+        // Fall back gracefully to lounge chat lobby
+        leaveRadioSession();
+      });
+    }
+
+    // Handles playing back the WebRTC audio feed and piping it to visualizer
+    function setupIncomingMedia(call) {
+      call.on('stream', (stream) => {
+        // Create dynamic audio player DOM node
+        if (globalAudioNodeElement) {
+          globalAudioNodeElement.pause();
+          globalAudioNodeElement.remove();
+        }
+
+        remoteStream = stream;
+        globalAudioNodeElement = document.createElement('audio');
+        globalAudioNodeElement.srcObject = stream;
+        globalAudioNodeElement.autoplay = true;
+        globalAudioNodeElement.playsInline = true; // Support mobile browser loopback
+        globalAudioNodeElement.volume = parseFloat(listenerVolume.value);
+        document.body.appendChild(globalAudioNodeElement);
+
+        // Standard browser interaction play check
+        const playPromise = globalAudioNodeElement.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log("Autoplay blocked by browser. Unmuting upon next click anywhere on page.");
+            
+            // Interaction safety listener to resume state instantly
+            const forcePlay = () => {
+              if (globalAudioNodeElement) {
+                globalAudioNodeElement.play().catch(e => console.log("Still blocked:", e));
+              }
+              document.removeEventListener('click', forcePlay);
+            };
+            document.addEventListener('click', forcePlay);
+          });
+        }
+
+        // Initialize visualizer on listener's screen
+        initVisualizer(stream);
+      });
+
+      call.on('close', () => {
+        if (globalAudioNodeElement) {
+          globalAudioNodeElement.pause();
+          globalAudioNodeElement.remove();
+          globalAudioNodeElement = null;
+        }
+      });
+    }
+
+
+    // ==========================================
+    // LOBBY/LOUNGE FALLBACK CODE (No active host)
+    // ==========================================
+    function enterLobbyOnlyMode() {
+      // Clean previous connections
+      activeConnections.forEach(c => c.close());
+      activeConnections = [];
+
+      appendChatMessage("System", "📻 Host offline. Setting up study lounge chat mode...", "#f59e0b", true);
+
+      // We attempt to find an existing lounge coordinator in this room: hw-radio-{room_id}-lobby
+      const coordinateId = `hw-radio-${currentRoomId}-lobby`;
+
+      // Attempt to register our Peer Node as the lobby coordinator!
+      peer.destroy(); // Clear existing temporary peer ID
+
+      // Create a deterministic lobby ID so other listeners aggregate here
+      const checkLobbyId = `hw-radio-${currentRoomId}-lobby`;
+      
+      peer = new Peer(checkLobbyId, {
+        debug: 1
+      });
+
+      peer.on('open', (id) => {
+        // We successfully grabbed the coordinator slot! We are the room chat leader.
+        isLobbyCoordinator = true;
+        mountLobbyInterface();
+        appendChatMessage("System", "✨ You are the lounge coordinator for this room.", "#34d399", true);
+      });
+
+      peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+          // Lobby is already managed by someone else! Create a normal client peer and connect to it.
+          const followerPeerId = `hw-radio-${currentRoomId}-lounge-listener-${makeId(6)}`;
+          peer = new Peer(followerPeerId, { debug: 1 });
+
+          peer.on('open', () => {
+            const coordConn = peer.connect(checkLobbyId, {
+              metadata: { nickname: myNickname, color: myColor }
+            });
+
+            coordConn.on('open', () => {
+              activeConnections.push(coordConn);
+              mountLobbyInterface(false);
+              appendChatMessage("System", "Connected to lounge study lounge!", "#60a5fa", true);
+            });
+
+            coordConn.on('data', (data) => {
+              if (data && data.type === 'CHAT') {
+                appendChatMessage(data.sender, data.text, data.color, data.sender === 'System');
+              }
+            });
+
+            coordConn.on('close', () => {
+              appendChatMessage("System", "Lounge coordinator disconnected. Re-synchronizing...", "#f43f5e", true);
+              enterLobbyOnlyMode(); // Auto-heal lobby slot
+            });
+          });
+        } else {
+          showModal("Lounge Error", "Could not coordinate peer lounge: " + err.message);
+        }
+      });
+
+      // Coordinator specific listener handlers
+      peer.on('connection', (conn) => {
+        if (isLobbyCoordinator) {
+          setupHostDataLink(conn); // Coordinator behaves similar to host for text chat relaying
+        }
+      });
+    }
+
+    function mountLobbyInterface(isLeader = true) {
+      updateConnectionState('online', 'Lounge Active');
+
+      deckSelectionArea.classList.add('hidden');
+      activeDashboard.classList.remove('hidden');
+      receiverPlayerBlock.classList.add('hidden'); // No stream to play
+
+      activeLabel.innerText = "Lounge Chat Active";
+      activeLabel.className = "text-[10px] font-bold text-amber-400 uppercase tracking-wider";
+      activeRoomName.innerText = `Room: ${currentRoomId}`;
+      txtStatusLabel.innerText = isLeader ? "Hosting Study Room" : "Study Room Lounge";
+      txtStatusLabel.className = "font-bold text-amber-400";
+      txtPeerCount.innerText = isLeader ? activeConnections.length : "Connected";
+
+      chatRoomHeader.innerText = `${currentRoomId} - Study Lounge`;
+      chatRoomSubtitle.innerText = "No stream is broadcasted. Use chat to connect!";
+      lobbyStatusBadge.innerText = "Lounge Offline";
+      lobbyStatusBadge.className = "text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-full border border-slate-800/85";
+      chatHeaderPulse.className = "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse";
+
+      chatInput.disabled = false;
+      btnSendChat.disabled = false;
+      chatInput.placeholder = "Talk to study buddies in this room...";
+    }
+
+  </script>
+</body>
+</html>
