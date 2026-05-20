@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chipmunk - Secure FaceTime Lounge</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS for seamless WebRTC P2P matchmaking and streaming -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    body {
+      background: radial-gradient(circle at top right, #1e1b4b 0%, #030712 100%);
+    }
+    .video-container {
+      aspect-ratio: 4/3;
+    }
+    .pulse-amber {
+      animation: pulse-amber-anim 2s infinite;
+    }
+    @keyframes pulse-amber-anim {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+      50% { box-shadow: 0 0 15px 4px rgba(245, 158, 11, 0.2); }
+    }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col justify-between font-sans selection:bg-amber-500/30 selection:text-amber-200">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <span class="text-xl">🐿️</span>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold font-display tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-amber-200 to-orange-300">Chipmunk</h1>
+          <p class="text-xs text-slate-400">Secure Direct FaceTime with Friends</p>
+        </div>
+      </div>
+      
+      <div id="connectionStatus" class="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800 text-xs text-slate-400">
+        <span class="w-2 h-2 rounded-full bg-slate-500" id="statusDot"></span>
+        <span id="statusText">Offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Area -->
+  <main class="max-w-4xl mx-auto px-4 py-8 flex-grow w-full flex flex-col justify-center gap-6">
+
+    <!-- Screen 1: Entrance Form -->
+    <div id="setupScreen" class="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-6 md:p-8 backdrop-blur-xl max-w-md w-full mx-auto shadow-2xl relative overflow-hidden">
+      <div class="absolute -top-12 -right-12 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+      
+      <h2 class="text-xl font-bold font-display text-amber-300 mb-2">Connect to the Lounge</h2>
+      <p class="text-xs text-slate-400 mb-6">Choose a nickname to get paired securely with active friends in your lounge.</p>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1.5">Your Username</label>
+          <input type="text" id="nicknameInput" placeholder="Enter Username..." maxlength="15" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition-colors">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1.5 font-mono">Shared Lounge ID</label>
+          <input type="text" id="loungeIdInput" value="chipmunk-lounge" placeholder="Lounge Name..." class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-amber-500 transition-colors font-mono text-amber-400">
+        </div>
+
+        <button id="btnConnect" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold rounded-xl transition-all shadow-md active:scale-98 flex items-center justify-center gap-2">
+          <span>Start Face Time Session</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Screen 2: FaceTime Workspace (Hidden initially) -->
+    <div id="callScreen" class="hidden flex flex-col gap-6">
+      
+      <!-- Video Streams Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Local Stream -->
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden relative video-container flex items-center justify-center">
+          <video id="localVideo" class="w-full h-full object-cover transform -scale-x-100" autoplay playsinline muted></video>
+          
+          <!-- Fallback when camera is disabled -->
+          <div id="localPlaceholder" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3 hidden">
+            <div class="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
+              <span class="text-2xl">👤</span>
+            </div>
+            <span class="text-xs text-slate-400">Your Camera is Off</span>
+          </div>
+
+          <div class="absolute bottom-3 left-3 bg-slate-950/80 border border-slate-800/85 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-200">
+            You (<span id="localLabel"></span>)
+          </div>
+        </div>
+
+        <!-- Remote Stream -->
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden relative video-container flex items-center justify-center">
+          <video id="remoteVideo" class="w-full h-full object-cover" autoplay playsinline></video>
+          
+          <!-- Idle / Waiting Indicator Overlay -->
+          <div id="remotePlaceholder" class="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-4 p-4 text-center">
+            <div class="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center pulse-amber">
+              <span class="text-2xl animate-spin">⏳</span>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-slate-200">Waiting for a friend...</h3>
+              <p class="text-[11px] text-slate-500 mt-1 max-w-xs">Ask your friends to open Chipmunk using the same Lounge ID to start chatting!</p>
+            </div>
+          </div>
+
+          <div class="absolute bottom-3 left-3 bg-slate-950/80 border border-slate-800/85 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-200" id="remoteLabelContainer">
+            Friend: <span id="remoteLabel">Connecting...</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Controls Deck -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+        
+        <!-- Stream Toggles -->
+        <div class="flex items-center gap-3">
+          <!-- Toggle Camera -->
+          <button id="btnToggleCam" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-2">
+            <span id="camIcon">📷</span>
+            <span id="camText">Stop Camera</span>
+          </button>
+          
+          <!-- Toggle Microphone -->
+          <button id="btnToggleMic" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-2">
+            <span id="micIcon">🎤</span>
+            <span id="micText">Mute Mic</span>
+          </button>
+        </div>
+
+        <!-- Disconnect / Hang Up -->
+        <button id="btnHangUp" class="px-6 py-2 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 text-xs font-bold text-rose-400 rounded-xl transition-all">
+          Hang Up & Leave
+        </button>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Feedback Dialog Overlay -->
+  <div id="dialogOverlay" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 max-w-sm w-full rounded-2xl p-6 shadow-2xl">
+      <h3 id="dialogTitle" class="text-base font-bold font-display text-slate-100 mb-2">Permissions Needed</h3>
+      <p id="dialogDescription" class="text-xs text-slate-400 leading-relaxed mb-6"></p>
+      <button id="dialogBtnClose" class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition-colors">
+        Acknowledge
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-900 bg-slate-950/50 py-4 text-center text-[10px] text-slate-600">
+    <p>Chipmunk FaceTime Sandbox. Client-Side direct WebRTC engine.</p>
+  </footer>
+
+  <script>
+    // State Variables
+    let peer = null;
+    let localStream = null;
+    let remoteCall = null;
+    let coordinatorConn = null; // Connection to/from the lounge coordinator
+    
+    // Tracks state
+    let isVideoEnabled = true;
+    let isAudioEnabled = true;
+    let myNickname = "Buddy";
+    let myLoungeId = "chipmunk-lounge";
+
+    // Track active pairings
+    let waitingPeers = []; // Used if we are the coordinator
+    let isCoordinator = false;
+
+    // Elements
+    const setupScreen = document.getElementById('setupScreen');
+    const callScreen = document.getElementById('callScreen');
+    const nicknameInput = document.getElementById('nicknameInput');
+    const loungeIdInput = document.getElementById('loungeIdInput');
+    const btnConnect = document.getElementById('btnConnect');
+
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const localPlaceholder = document.getElementById('localPlaceholder');
+    const remotePlaceholder = document.getElementById('remotePlaceholder');
+    
+    const localLabel = document.getElementById('localLabel');
+    const remoteLabel = document.getElementById('remoteLabel');
+    const remoteLabelContainer = document.getElementById('remoteLabelContainer');
+
+    const btnToggleCam = document.getElementById('btnToggleCam');
+    const btnToggleMic = document.getElementById('btnToggleMic');
+    const btnHangUp = document.getElementById('btnHangUp');
+    
+    const camIcon = document.getElementById('camIcon');
+    const camText = document.getElementById('camText');
+    const micIcon = document.getElementById('micIcon');
+    const micText = document.getElementById('micText');
+
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+
+    const dialogOverlay = document.getElementById('dialogOverlay');
+    const dialogTitle = document.getElementById('dialogTitle');
+    const dialogDescription = document.getElementById('dialogDescription');
+    const dialogBtnClose = document.getElementById('dialogBtnClose');
+
+    // Utility: Show clean custom alert dialogs
+    function showDialog(title, text) {
+      dialogTitle.innerText = title;
+      dialogDescription.innerHTML = text;
+      dialogOverlay.classList.remove('hidden');
+    }
+    dialogBtnClose.addEventListener('click', () => dialogOverlay.classList.add('hidden'));
+
+    // Handle initial connect action
+    btnConnect.addEventListener('click', async () => {
+      myNickname = nicknameInput.value.trim() || "Buddy" + Math.floor(Math.random() * 900 + 100);
+      myLoungeId = loungeIdInput.value.trim().toLowerCase() || "chipmunk-lounge";
+
+      updateUIStatus('connecting', 'Acquiring Cam/Mic Access...');
+
+      try {
+        // Request video and audio tracks
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 24 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true
+          }
+        });
+
+        localVideo.srcObject = localStream;
+        localLabel.innerText = myNickname;
+
+        // Switch screen states
+        setupScreen.classList.add('hidden');
+        callScreen.classList.remove('hidden');
+
+        // Initialize Peer JS Client
+        initPeerSystem();
+
+      } catch (err) {
+        console.error("Camera access failed:", err);
+        updateUIStatus('offline', 'Permissions Denied');
+        showDialog(
+          "Media Access Required", 
+          "We couldn't connect because your camera or microphone permissions were denied. Please enable them in your browser settings!"
+        );
+      }
+    });
+
+    // Setup P2P match routing
+    function initPeerSystem() {
+      // Create random ID for ourselves
+      const myUniqueId = `chipmunk-${myLoungeId}-${Math.floor(Math.random() * 89999 + 10000)}`;
+      
+      updateUIStatus('connecting', 'Linking Network...');
+
+      peer = new Peer(myUniqueId, {
+        debug: 1
+      });
+
+      peer.on('open', (id) => {
+        updateUIStatus('connecting', 'Searching for Coordinator...');
+        attemptLobbyConnection();
+      });
+
+      // Handle direct FaceTime calls from friends
+      peer.on('call', (call) => {
+        remoteCall = call;
+        call.answer(localStream);
+        
+        call.on('stream', (remoteStream) => {
+          remoteVideo.srcObject = remoteStream;
+          remotePlaceholder.classList.add('hidden');
+          
+          // Get metadata if possible
+          remoteLabel.innerText = "Connected";
+        });
+
+        call.on('close', resetRemoteFaceTime);
+      });
+
+      peer.on('error', (err) => {
+        console.error("Peer network error:", err);
+        if (err.type === 'network') {
+          showDialog("Network Disturbance", "FaceTime connection lost. Please check your internet connection.");
+        }
+      });
+    }
+
+    // Try finding the Lounge Coordinator node
+    function attemptLobbyConnection() {
+      const coordinatorId = `chipmunk-coord-${myLoungeId}`;
+      
+      // Attempt connection to deterministic coordinator ID
+      const conn = peer.connect(coordinatorId);
+      
+      let coordinatorResponsive = false;
+      const timeout = setTimeout(() => {
+        if (!coordinatorResponsive) {
+          conn.close();
+          // No active lobby coordinator. We assume the role!
+          assumeCoordinatorRole();
+        }
+      }, 2500);
+
+      conn.on('open', () => {
+        coordinatorResponsive = true;
+        clearTimeout(timeout);
+        coordinatorConn = conn;
+        
+        updateUIStatus('online', 'Lobby Connected');
+
+        // Request pairing from the coordinator
+        conn.send({
+          type: 'REQUEST_PAIR',
+          nickname: myNickname,
+          peerId: peer.id
+        });
+      });
+
+      conn.on('data', (data) => {
+        if (data.type === 'PAIR_WITH') {
+          initiateDirectFaceTime(data.targetId, data.targetName);
+        }
+      });
+
+      conn.on('close', () => {
+        if (!isCoordinator) {
+          updateUIStatus('connecting', 'Lobby Lost. Auto-healing...');
+          attemptLobbyConnection();
+        }
+      });
+    }
+
+    // Assume the coordinator role (so other friends can connect to us)
+    function assumeCoordinatorRole() {
+      isCoordinator = true;
+      waitingPeers = [];
+
+      // Recreate our Peer on the deterministic lobby coordinator address
+      if (peer) {
+        peer.destroy();
+      }
+
+      const coordinatorId = `chipmunk-coord-${myLoungeId}`;
+      peer = new Peer(coordinatorId, {
+        debug: 1
+      });
+
+      peer.on('open', (id) => {
+        updateUIStatus('online', 'Hosting Lobby Coordinator');
+        
+        // Since we are the coordinator, we can still call/be called by others!
+        // Coordinators can participate in calls if needed, but primarily manage matching.
+      });
+
+      peer.on('connection', (conn) => {
+        conn.on('data', (data) => {
+          if (data.type === 'REQUEST_PAIR') {
+            handlePairingRequest(conn, data.peerId, data.nickname);
+          }
+        });
+      });
+
+      peer.on('call', (call) => {
+        remoteCall = call;
+        call.answer(localStream);
+        call.on('stream', (stream) => {
+          remoteVideo.srcObject = stream;
+          remotePlaceholder.classList.add('hidden');
+          remoteLabel.innerText = "Active Friend";
+        });
+        call.on('close', resetRemoteFaceTime);
+      });
+    }
+
+    // Pair waiting friends sequentially
+    function handlePairingRequest(conn, peerId, name) {
+      if (waitingPeers.length > 0) {
+        // We have a waiting friend! Match them together.
+        const buddy = waitingPeers.shift();
+
+        // Instruct Buddy to initiate FaceTime with new user
+        buddy.connection.send({
+          type: 'PAIR_WITH',
+          targetId: peerId,
+          targetName: name
+        });
+
+        // Instruct new user to connect with Buddy
+        conn.send({
+          type: 'PAIR_WITH',
+          targetId: buddy.peerId,
+          targetName: buddy.name
+        });
+
+      } else {
+        // Nobody waiting. Place this friend in queue.
+        waitingPeers.push({
+          peerId: peerId,
+          name: name,
+          connection: conn
+        });
+      }
+    }
+
+    // Initiate WebRTC Call to paired peer
+    function initiateDirectFaceTime(targetId, name) {
+      remoteLabel.innerText = name;
+      
+      const call = peer.call(targetId, localStream);
+      remoteCall = call;
+
+      call.on('stream', (remoteStream) => {
+        remoteVideo.srcObject = remoteStream;
+        remotePlaceholder.classList.add('hidden');
+      });
+
+      call.on('close', resetRemoteFaceTime);
+    }
+
+    function resetRemoteFaceTime() {
+      remoteVideo.srcObject = null;
+      remotePlaceholder.classList.remove('hidden');
+      remoteLabel.innerText = "Connecting...";
+    }
+
+    // Controls Logic
+    btnToggleCam.addEventListener('click', () => {
+      if (!localStream) return;
+      isVideoEnabled = !isVideoEnabled;
+      
+      localStream.getVideoTracks().forEach(track => {
+        track.enabled = isVideoEnabled;
+      });
+
+      if (isVideoEnabled) {
+        localPlaceholder.classList.add('hidden');
+        camIcon.innerText = "📷";
+        camText.innerText = "Stop Camera";
+        btnToggleCam.className = "px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-2";
+      } else {
+        localPlaceholder.classList.remove('hidden');
+        camIcon.innerText = "❌";
+        camText.innerText = "Start Camera";
+        btnToggleCam.className = "px-4 py-2 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-xl transition-all flex items-center gap-2";
+      }
+    });
+
+    btnToggleMic.addEventListener('click', () => {
+      if (!localStream) return;
+      isAudioEnabled = !isAudioEnabled;
+
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = isAudioEnabled;
+      });
+
+      if (isAudioEnabled) {
+        micIcon.innerText = "🎤";
+        micText.innerText = "Mute Mic";
+        btnToggleMic.className = "px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-2";
+      } else {
+        micIcon.innerText = "🔇";
+        micText.innerText = "Unmute Mic";
+        btnToggleMic.className = "px-4 py-2 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 text-rose-400 text-xs font-bold rounded-xl transition-all flex items-center gap-2";
+      }
+    });
+
+    btnHangUp.addEventListener('click', () => {
+      hangUpAndReturn();
+    });
+
+    function hangUpAndReturn() {
+      if (remoteCall) {
+        remoteCall.close();
+        remoteCall = null;
+      }
+      if (coordinatorConn) {
+        coordinatorConn.close();
+        coordinatorConn = null;
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+      if (peer) {
+        peer.destroy();
+        peer = null;
+      }
+
+      // Reset state
+      isVideoEnabled = true;
+      isAudioEnabled = true;
+      isCoordinator = false;
+      waitingPeers = [];
+
+      // Restore GUI elements
+      localVideo.srcObject = null;
+      remoteVideo.srcObject = null;
+      localPlaceholder.classList.add('hidden');
+      remotePlaceholder.classList.remove('hidden');
+
+      callScreen.classList.add('hidden');
+      setupScreen.classList.remove('hidden');
+
+      updateUIStatus('offline', 'Offline');
+    }
+
+    function updateUIStatus(state, label) {
+      statusText.innerText = label;
+      if (state === 'online') {
+        statusDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+      } else if (state === 'connecting') {
+        statusDot.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+      } else {
+        statusDot.className = "w-2 h-2 rounded-full bg-slate-500";
+      }
+    }
+
+  </script>
+</body>
+</html>
