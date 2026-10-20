@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tab Audio Capture & Trimmer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Wavesurfer.js for Visual Waveform Trimming -->
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- Navigation Bar -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-indigo-600 rounded-lg text-white">
+                <i class="fa-solid fa-record-vinyl text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold leading-none">Tab Audio Clipper</h1>
+                <p class="text-xs text-slate-400 mt-1">Capture, clip, and export tab sound</p>
+            </div>
+        </div>
+
+        <!-- Security Warning / Requirements Badge -->
+        <div id="protocol-badge" class="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span id="protocol-text">Checking environment...</span>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto w-full px-4 py-8 flex-1 flex flex-col space-y-6">
+
+        <!-- Instructions Panel -->
+        <div class="bg-slate-800/50 border border-slate-700/60 rounded-xl p-5 shadow-lg">
+            <h2 class="text-md font-semibold text-indigo-400 mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-circle-info"></i> How it works
+            </h2>
+            <ol class="list-decimal list-inside text-sm text-slate-300 space-y-1.5">
+                <li>Click <strong>"Capture Tab Audio"</strong> and select the browser tab you want to record.</li>
+                <li><strong>Crucial:</strong> Check the <em>"Share tab audio"</em> toggle in the browser prompt dialog.</li>
+                <li>Switch to your target tab, start playing music or video, and click <strong>"Start Recording"</strong> here.</li>
+                <li>When finished, click <strong>"Stop Recording"</strong>. Your recording will load into the waveform editor for clipping and export.</li>
+            </ol>
+        </div>
+
+        <!-- Recording Controls Section -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center relative overflow-hidden">
+            <!-- Dynamic Background Audio Visualizer Bars -->
+            <div id="visualizer" class="flex items-end justify-center space-x-1.5 h-16 w-full mb-6 opacity-80">
+                <!-- Visualizer bars generated dynamically -->
+            </div>
+
+            <!-- Status Display -->
+            <div class="text-center mb-6">
+                <span id="capture-status" class="px-3 py-1 bg-slate-800 text-slate-400 text-xs font-medium rounded-full border border-slate-700">
+                    No Tab Connected
+                </span>
+                <div id="timer" class="text-4xl font-mono font-bold mt-3 text-slate-200">00:00:00</div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap gap-4 justify-center items-center">
+                <button id="btn-capture" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl transition duration-150 flex items-center gap-2 shadow-lg shadow-indigo-600/30">
+                    <i class="fa-solid fa-window-restore"></i> Capture Tab Audio
+                </button>
+
+                <button id="btn-record" disabled class="px-5 py-2.5 bg-slate-800 text-slate-500 font-medium rounded-xl transition duration-150 flex items-center gap-2 cursor-not-allowed border border-slate-700">
+                    <i class="fa-solid fa-circle text-red-500"></i> Start Recording
+                </button>
+
+                <button id="btn-stop" disabled class="px-5 py-2.5 bg-slate-800 text-slate-500 font-medium rounded-xl transition duration-150 flex items-center gap-2 cursor-not-allowed border border-slate-700">
+                    <i class="fa-solid fa-square"></i> Stop Recording
+                </button>
+            </div>
+        </div>
+
+        <!-- Waveform Trimmer Section -->
+        <div id="editor-card" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl hidden flex-col space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 class="font-semibold text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-scissors text-indigo-400"></i> Clip & Trim Audio
+                </h3>
+                <span class="text-xs text-slate-400">Drag handles on the waveform to select range</span>
+            </div>
+
+            <!-- Waveform Container -->
+            <div class="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                <div id="waveform" class="w-full"></div>
+            </div>
+
+            <!-- Player & Selection Information -->
+            <div class="flex flex-wrap items-center justify-between gap-4 pt-2">
+                <!-- Playback controls -->
+                <div class="flex items-center space-x-3">
+                    <button id="btn-play-selection" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 flex items-center gap-2">
+                        <i id="play-icon" class="fa-solid fa-play"></i> Play Selection
+                    </button>
+                </div>
+
+                <!-- Region Timings -->
+                <div class="flex items-center space-x-4 text-xs font-mono text-slate-400 bg-slate-800/60 px-4 py-2 rounded-lg border border-slate-700/50">
+                    <div>Start: <span id="time-start" class="text-indigo-400">0.00s</span></div>
+                    <div>End: <span id="time-end" class="text-indigo-400">0.00s</span></div>
+                    <div>Duration: <span id="time-duration" class="text-emerald-400">0.00s</span></div>
+                </div>
+
+                <!-- Export Options -->
+                <div class="flex items-center space-x-2">
+                    <button id="btn-export-clipped" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg shadow-lg shadow-emerald-600/30 flex items-center gap-2">
+                        <i class="fa-solid fa-download"></i> Export Clip (WAV)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+        Web Audio Tab Capture • Runs client-side in secure context
+    </footer>
+
+    <script>
+        // Check SSL / Localhost context status
+        const isSecure = window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        const protocolBadge = document.getElementById('protocol-badge');
+        const protocolText = document.getElementById('protocol-text');
+
+        if (isSecure) {
+            protocolBadge.className = "px-3 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+            protocolText.textContent = "Secure Environment (HTTPS/Localhost)";
+        } else {
+            protocolBadge.className = "px-3 py-1.5 rounded-full text-xs font-semibold flex items-center space-x-2 bg-rose-500/10 text-rose-400 border border-rose-500/20";
+            protocolText.textContent = "HTTPS Required! Host on GitHub Pages to enable audio capture.";
+        }
+
+        // Global State Variables
+        let displayStream = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let audioCtx = null;
+        let analyser = null;
+        let visualizerInterval = null;
+        let startTime = 0;
+        let timerInterval = null;
+        let wavesurfer = null;
+        let wsRegions = null;
+        let selectedRegion = null;
+        let fullAudioBuffer = null;
+
+        // UI References
+        const btnCapture = document.getElementById('btn-capture');
+        const btnRecord = document.getElementById('btn-record');
+        const btnStop = document.getElementById('btn-stop');
+        const captureStatus = document.getElementById('capture-status');
+        const timerDisplay = document.getElementById('timer');
+        const visualizerContainer = document.getElementById('visualizer');
+        const editorCard = document.getElementById('editor-card');
+        const btnPlaySelection = document.getElementById('btn-play-selection');
+        const playIcon = document.getElementById('play-icon');
+        const timeStart = document.getElementById('time-start');
+        const timeEnd = document.getElementById('time-end');
+        const timeDuration = document.getElementById('time-duration');
+        const btnExportClipped = document.getElementById('btn-export-clipped');
+
+        // Build Visualizer Equalizer Bars
+        const numBars = 32;
+        const bars = [];
+        for (let i = 0; i < numBars; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'w-1.5 bg-indigo-500/40 rounded-full transition-all duration-75';
+            bar.style.height = '4px';
+            visualizerContainer.appendChild(bar);
+            bars.push(bar);
+        }
+
+        // Step 1: Capture Tab Audio Stream
+        btnCapture.addEventListener('click', async () => {
+            try {
+                // Request tab display media with audio
+                displayStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true, // Required by browser API spec to trigger picker window
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+
+                // Verify audio track exists
+                const audioTracks = displayStream.getAudioTracks();
+                if (audioTracks.length === 0) {
+                    alert("No audio track detected! Make sure you check 'Share tab audio' in the browser window selection prompt.");
+                    displayStream.getTracks().forEach(track => track.stop());
+                    return;
+                }
+
+                // Stop video track since we only need audio to save resources
+                displayStream.getVideoTracks().forEach(track => track.stop());
+
+                // Setup Audio Visualizer Context
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaStreamSource(new MediaStream([audioTracks[0]]));
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 64;
+                source.connect(analyser);
+
+                startVisualizer();
+
+                // Listen for stream end (user clicks "Stop sharing" bar)
+                audioTracks[0].onended = () => {
+                    resetRecordingState();
+                };
+
+                // Update UI State
+                captureStatus.className = "px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-medium rounded-full";
+                captureStatus.textContent = "Tab Audio Connected";
+
+                btnRecord.disabled = false;
+                btnRecord.className = "px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded-xl transition duration-150 flex items-center gap-2 shadow-lg shadow-red-600/30 cursor-pointer";
+
+                btnCapture.className = "px-5 py-2.5 bg-slate-800 text-slate-300 font-medium rounded-xl border border-slate-700 hover:bg-slate-700 transition";
+
+            } catch (err) {
+                console.error("Tab Capture Error:", err);
+                if (!isSecure) {
+                    alert("Capture failed: getDisplayMedia requires HTTPS or localhost!");
+                }
+            }
+        });
+
+        // Step 2: Start Recording Captured Stream
+        btnRecord.addEventListener('click', () => {
+            if (!displayStream) return;
+
+            recordedChunks = [];
+            const audioTrack = displayStream.getAudioTracks()[0];
+            const recordingStream = new MediaStream([audioTrack]);
+
+            mediaRecorder = new MediaRecorder(recordingStream, { mimeType: getSupportedMimeType() });
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordedChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = processRecordedAudio;
+
+            mediaRecorder.start(100);
+
+            // Timer
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000);
+
+            // UI updates
+            btnRecord.disabled = true;
+            btnRecord.classList.add('opacity-50', 'cursor-not-allowed');
+
+            btnStop.disabled = false;
+            btnStop.className = "px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl transition duration-150 flex items-center gap-2 border border-slate-600 cursor-pointer";
+
+            captureStatus.textContent = "Recording Tab Audio...";
+            captureStatus.className = "px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-medium rounded-full animate-pulse";
+        });
+
+        // Step 3: Stop Recording
+        btnStop.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            clearInterval(timerInterval);
+
+            // UI updates
+            btnStop.disabled = true;
+            btnStop.className = "px-5 py-2.5 bg-slate-800 text-slate-500 font-medium rounded-xl transition duration-150 flex items-center gap-2 cursor-not-allowed border border-slate-700";
+
+            btnRecord.disabled = false;
+            btnRecord.classList.remove('opacity-50', 'cursor-not-allowed');
+
+            captureStatus.textContent = "Tab Audio Connected";
+            captureStatus.className = "px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-medium rounded-full";
+        });
+
+        function getSupportedMimeType() {
+            const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4'];
+            for (let type of types) {
+                if (MediaRecorder.isTypeSupported(type)) return type;
+            }
+            return '';
+        }
+
+        function updateTimer() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const hrs = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+            const secs = String(elapsed % 60).padStart(2, '0');
+            timerDisplay.textContent = `${hrs}:${mins}:${secs}`;
+        }
+
+        // Visualizer bar animation loop
+        function startVisualizer() {
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            visualizerInterval = setInterval(() => {
+                if (!analyser) return;
+                analyser.getByteFrequencyData(dataArray);
+                for (let i = 0; i < numBars; i++) {
+                    const value = dataArray[i] || 0;
+                    const heightPercent = Math.max(8, (value / 255) * 100);
+                    bars[i].style.height = `${heightPercent}%`;
+                    bars[i].style.backgroundColor = value > 150 ? '#818cf8' : '#6366f1';
+                }
+            }, 50);
+        }
+
+        function resetRecordingState() {
+            clearInterval(visualizerInterval);
+            clearInterval(timerInterval);
+            displayStream = null;
+            captureStatus.textContent = "No Tab Connected";
+            captureStatus.className = "px-3 py-1 bg-slate-800 text-slate-400 text-xs font-medium rounded-full border border-slate-700";
+            btnRecord.disabled = true;
+            btnRecord.className = "px-5 py-2.5 bg-slate-800 text-slate-500 font-medium rounded-xl transition duration-150 flex items-center gap-2 cursor-not-allowed border border-slate-700";
+            btnStop.disabled = true;
+            btnStop.className = "px-5 py-2.5 bg-slate-800 text-slate-500 font-medium rounded-xl transition duration-150 flex items-center gap-2 cursor-not-allowed border border-slate-700";
+            bars.forEach(b => b.style.height = '4px');
+        }
+
+        // Step 4: Process Audio & Setup Wavesurfer Trimmer
+        async function processRecordedAudio() {
+            const audioBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            const arrayBuffer = await audioBlob.arrayBuffer();
+
+            // Decode Audio Data for Wavesurfer and export processing
+            const offlineContext = new (window.AudioContext || window.webkitAudioContext)();
+            fullAudioBuffer = await offlineContext.decodeAudioData(arrayBuffer);
+
+            // Show Waveform Card
+            editorCard.classList.remove('hidden');
+            editorCard.classList.add('flex');
+
+            initWaveSurfer(audioBlob);
+        }
+
+        function initWaveSurfer(audioBlob) {
+            if (wavesurfer) {
+                wavesurfer.destroy();
+            }
+
+            // Initialize Wavesurfer instance
+            wavesurfer = WaveSurfer.create({
+                container: '#waveform',
+                waveColor: '#475569',
+                progressColor: '#6366f1',
+                height: 96,
+                barWidth: 2,
+                barRadius: 2,
+                cursorColor: '#f8fafc'
+            });
+
+            // Initialize Regions Plugin
+            wsRegions = wavesurfer.registerPlugin(WaveSurfer.Regions.create());
+
+            wavesurfer.loadBlob(audioBlob);
+
+            wavesurfer.on('ready', () => {
+                const totalDuration = wavesurfer.getDuration();
+
+                // Create initial region selector spanning the entire recording
+                selectedRegion = wsRegions.addRegion({
+                    start: 0,
+                    end: totalDuration,
+                    color: 'rgba(99, 102, 241, 0.25)',
+                    drag: true,
+                    resize: true
+                });
+
+                updateRegionTimes(selectedRegion.start, selectedRegion.end);
+
+                // Handle Region Updates
+                wsRegions.on('region-updated', (region) => {
+                    selectedRegion = region;
+                    updateRegionTimes(region.start, region.end);
+                });
+            });
+
+            // Playback icon sync
+            wavesurfer.on('finish', () => {
+                playIcon.className = "fa-solid fa-play";
+            });
+        }
+
+        function updateRegionTimes(start, end) {
+            timeStart.textContent = `${start.toFixed(2)}s`;
+            timeEnd.textContent = `${end.toFixed(2)}s`;
+            timeDuration.textContent = `${(end - start).toFixed(2)}s`;
+        }
+
+        // Play selected region
+        btnPlaySelection.addEventListener('click', () => {
+            if (!wavesurfer || !selectedRegion) return;
+
+            if (wavesurfer.isPlaying()) {
+                wavesurfer.pause();
+                playIcon.className = "fa-solid fa-play";
+            } else {
+                selectedRegion.play();
+                playIcon.className = "fa-solid fa-pause";
+            }
+        });
+
+        // Step 5: Clip Audio Buffer & Export WAV
+        btnExportClipped.addEventListener('click', async () => {
+            if (!fullAudioBuffer || !selectedRegion) return;
+
+            const startSample = Math.floor(selectedRegion.start * fullAudioBuffer.sampleRate);
+            const endSample = Math.floor(selectedRegion.end * fullAudioBuffer.sampleRate);
+            const frameCount = endSample - startSample;
+
+            if (frameCount <= 0) {
+                alert("Invalid clip selection length!");
+                return;
+            }
+
+            // Create new AudioBuffer for the clipped audio
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const clippedBuffer = audioCtx.createBuffer(
+                fullAudioBuffer.numberOfChannels,
+                frameCount,
+                fullAudioBuffer.sampleRate
+            );
+
+            for (let channel = 0; channel < fullAudioBuffer.numberOfChannels; channel++) {
+                const channelData = fullAudioBuffer.getChannelData(channel);
+                const clippedData = clippedBuffer.getChannelData(channel);
+                for (let i = 0; i < frameCount; i++) {
+                    clippedData[i] = channelData[startSample + i];
+                }
+            }
+
+            // Convert AudioBuffer to WAV File Blob
+            const wavBlob = audioBufferToWavBlob(clippedBuffer);
+
+            // Download Trigger
+            const url = URL.createObjectURL(wavBlob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `clipped-tab-audio-${Date.now()}.wav`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        });
+
+        // Convert AudioBuffer data to PCM WAV Blob
+        function audioBufferToWavBlob(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const format = 1; // PCM
+            const bitDepth = 16;
+            
+            let result;
+            if (numChannels === 2) {
+                result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+            } else {
+                result = buffer.getChannelData(0);
+            }
+
+            return encodeWAV(result, numChannels, sampleRate, bitDepth);
+        }
+
+        function interleave(inputL, inputR) {
+            const length = inputL.length + inputR.length;
+            const result = new Float32Array(length);
+
+            let index = 0;
+            let inputIndex = 0;
+
+            while (index < length) {
+                result[index++] = inputL[inputIndex];
+                result[index++] = inputR[inputIndex];
+                inputIndex++;
+            }
+            return result;
+        }
+
+        function encodeWAV(samples, numChannels, sampleRate, bitDepth) {
+            const bytesPerSample = bitDepth / 8;
+            const blockAlign = numChannels * bytesPerSample;
+            const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+            const view = new DataView(buffer);
+
+            /* RIFF identifier */
+            writeString(view, 0, 'RIFF');
+            /* RIFF chunk length */
+            view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+            /* RIFF type */
+            writeString(view, 8, 'WAVE');
+            /* format chunk identifier */
+            writeString(view, 12, 'fmt ');
+            /* format chunk length */
+            view.setUint32(16, 16, true);
+            /* sample format (raw) */
+            view.setUint16(20, 1, true);
+            /* channel count */
+            view.setUint16(22, numChannels, true);
+            /* sample rate */
+            view.setUint32(24, sampleRate, true);
+            /* byte rate (sample rate * block align) */
+            view.setUint32(28, sampleRate * blockAlign, true);
+            /* block align */
+            view.setUint16(32, blockAlign, true);
+            /* bits per sample */
+            view.setUint16(34, bitDepth, true);
+            /* data chunk identifier */
+            writeString(view, 36, 'data');
+            /* data chunk length */
+            view.setUint32(40, samples.length * bytesPerSample, true);
+
+            // Write PCM audio samples
+            let offset = 44;
+            for (let i = 0; i < samples.length; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+    </script>
+</body>
+</html>
